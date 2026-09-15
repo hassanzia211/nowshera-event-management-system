@@ -2,11 +2,26 @@ import csv
 import io
 import os
 import sqlite3
+import json
+import urllib.request
 from datetime import datetime
 from functools import wraps
 
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
+
+
+def notify_n8n(action, **payload):
+    """Send optional automation events without breaking the core application."""
+    webhook_url = os.environ.get("N8N_WEBHOOK_URL")
+    if not webhook_url:
+        return
+    body = json.dumps({"action": action, **payload}).encode("utf-8")
+    req = urllib.request.Request(webhook_url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=3).read()
+    except Exception:
+        pass
 
 
 def create_app(test_config=None):
@@ -169,7 +184,11 @@ def create_app(test_config=None):
         elif event["places_left"] <= 0: message = "This event is full."
         else:
             connection.execute("INSERT INTO registrations(event_id,user_id,status) VALUES(?,?,'active')", (event_id,g.user["id"]))
-            connection.commit(); flash("Your place is confirmed!", "success")
+            connection.commit()
+            notify_n8n("registration_created", attendee_name=g.user["name"], attendee_email=g.user["email"], event_title=event["title"], event_date=event["event_date"], event_time=event["event_time"], location=event["location"])
+            if event["places_left"] == 1:
+                notify_n8n("event_full", admin_email="admin@nowshera.test", event_title=event["title"])
+            flash("Your place is confirmed!", "success")
             return redirect(url_for("my_registrations"))
         connection.rollback(); flash(message, "error")
         return redirect(url_for("event_detail", event_id=event_id))
@@ -184,9 +203,11 @@ def create_app(test_config=None):
     @app.post("/registrations/<int:registration_id>/cancel")
     @login_required
     def cancel_registration(registration_id):
+        registration = db().execute("""SELECT r.id,e.title,u.name,u.email FROM registrations r JOIN events e ON e.id=r.event_id JOIN users u ON u.id=r.user_id WHERE r.id=? AND r.user_id=? AND r.status='active'""", (registration_id,g.user["id"])).fetchone()
         result = db().execute("UPDATE registrations SET status='cancelled',cancelled_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=? AND status='active'", (registration_id,g.user["id"]))
         db().commit()
         if not result.rowcount: abort(404)
+        notify_n8n("registration_cancelled", attendee_name=registration["name"], attendee_email=registration["email"], event_title=registration["title"])
         flash("Registration cancelled. The place is available again.", "success")
         return redirect(url_for("my_registrations"))
 
