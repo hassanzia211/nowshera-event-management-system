@@ -1,0 +1,58 @@
+{
+  "name": "Nowshera Events - Registration Notifications",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "nowshera-event-notifications", "responseMode": "responseNode", "options": {}},
+      "id": "webhook",
+      "name": "Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-600, 0],
+      "webhookId": "nowshera-event-notifications"
+    },
+    {
+      "parameters": {
+        "rules": {"values": [
+          {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.body.action }}", "rightValue": "registration_created", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "registered"},
+          {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.body.action }}", "rightValue": "registration_cancelled", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "cancelled"},
+          {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"leftValue": "={{ $json.body.action }}", "rightValue": "event_full", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "full"}
+        ]},
+        "options": {}
+      },
+      "id": "switch",
+      "name": "Route Notification",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": {"sendTo": "={{ $json.body.attendee_email }}", "subject": "=Registration confirmed: {{ $json.body.event_title }}", "message": "=Hello {{ $json.body.attendee_name }},<br><br>Your place for <strong>{{ $json.body.event_title }}</strong> is confirmed.<br>Date: {{ $json.body.event_date }}<br>Time: {{ $json.body.event_time }}<br>Location: {{ $json.body.location }}<br><br>Nowshera Events", "options": {}},
+      "id": "registered-email", "name": "Send Registration Email", "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": [-80, -180]
+    },
+    {
+      "parameters": {"sendTo": "={{ $json.body.attendee_email }}", "subject": "=Registration cancelled: {{ $json.body.event_title }}", "message": "=Hello {{ $json.body.attendee_name }},<br><br>Your registration for <strong>{{ $json.body.event_title }}</strong> has been cancelled and the place is available again.<br><br>Nowshera Events", "options": {}},
+      "id": "cancelled-email", "name": "Send Cancellation Email", "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": [-80, 0]
+    },
+    {
+      "parameters": {"sendTo": "={{ $json.body.admin_email }}", "subject": "=Event full: {{ $json.body.event_title }}", "message": "=The event <strong>{{ $json.body.event_title }}</strong> has reached its full capacity.", "options": {}},
+      "id": "full-email", "name": "Notify Admin Event Full", "type": "n8n-nodes-base.gmail", "typeVersion": 2.1, "position": [-80, 180]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={\"received\": true, \"action\": \"{{ $json.body.action }}\"}", "options": {}},
+      "id": "response", "name": "Automation Response", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.4, "position": [220, 0]
+    }
+  ],
+  "connections": {
+    "Event Webhook": {"main": [[{"node": "Route Notification", "type": "main", "index": 0}]]},
+    "Route Notification": {"main": [[{"node": "Send Registration Email", "type": "main", "index": 0}], [{"node": "Send Cancellation Email", "type": "main", "index": 0}], [{"node": "Notify Admin Event Full", "type": "main", "index": 0}]]},
+    "Send Registration Email": {"main": [[{"node": "Automation Response", "type": "main", "index": 0}]]},
+    "Send Cancellation Email": {"main": [[{"node": "Automation Response", "type": "main", "index": 0}]]},
+    "Notify Admin Event Full": {"main": [[{"node": "Automation Response", "type": "main", "index": 0}]]}
+  },
+  "pinData": {},
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "versionId": "983d31a6-6f64-4d49-9a54-23bf9cbea201",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}
